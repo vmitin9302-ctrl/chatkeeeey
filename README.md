@@ -11,34 +11,38 @@
 Сохраните полученный **BOT_TOKEN**.
 
 ### 2. Получите API ключ OpenRouter
-Зарегистрируйтесь на [openrouter.ai](https://openrouter.ai) и получите API ключ.
+Зарегистрируйтесь на [openrouter.ai](https://openrouter.ai) и получите API ключ
+(workspace → Settings → API Keys).
 
 ### 3. Настройте Railway
 
-1. Создайте репозиторий GitHub
-2. Загрузите файлы проекта
-3. Подключите репозиторий в Railway
-4. Добавьте переменные окружения:
-   - `BOT_TOKEN` - токен от BotFather
-   - `OPENROUTER_API_KEY` - ключ OpenRouter
+1. Создайте репозиторий GitHub и загрузите файлы проекта.
+2. В Railway: **Create → GitHub Repository** → выбрать репозиторий.
+3. Добавьте переменные окружения:
 
-### 4. Деплой на Railway
-Railway автоматически запустит бота!
+| Переменная | Обязательна | Значение |
+|---|---|---|
+| `BOT_TOKEN` | да | токен от BotFather |
+| `OPENROUTER_API_KEY` | да | ключ `sk-or-v1-...` |
+| `MODEL` | нет | модель OpenRouter, по умолчанию `meta-llama/llama-3.1-8b-instruct` |
+
+4. Deploy — Railway соберёт образ по `Dockerfile`.
+
+`PORT` не нужен: бот работает через long polling.
 
 ## Структура проекта
 ```
 bot/
-├── main.py          # Код бота
+├── main.py           # Код бота (aiogram + aiohttp → OpenRouter)
 ├── requirements.txt  # Зависимости
-├── Dockerfile        # Контейнер
+├── Dockerfile        # Контейнер для Railway
 └── README.md         # Инструкция
 ```
 
 ## Возможности
-- ✅ Отвечает на любые вопросы через GPT-4o
-- ✅ Поддержка команд (/start, /help)
-- ✅ Быстрый и надёжный
-- ✅ Простой деплой
+- ✅ Отвечает на любые текстовые сообщения через выбранную модель OpenRouter
+- ✅ Модель меняется переменной `MODEL`, без правки кода
+- ✅ Индикатор «печатает…» пока модель думает
 
 ## Обновление
-Просто пушьте изменения в GitHub - Railway автоматически обновит бота!
+Пуш в GitHub → Railway автоматически пересобирает и перезапускает бота.
