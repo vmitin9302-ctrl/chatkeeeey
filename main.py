@@ -27,11 +27,13 @@ def _parse_usernames(raw: str) -> set[str]:
 
 ALLOWED_USER_IDS = _parse_ids(os.getenv("ALLOWED_USER_IDS", ""))
 ALLOWED_USERNAMES = _parse_usernames(os.getenv("ALLOWED_USERNAMES", ""))
+MAX_HISTORY = int(os.getenv("MAX_HISTORY", "20") or 20)
 
 bot = Bot(token=os.getenv("BOT_TOKEN", ""))
 dp = Dispatcher()
 
 _session: "aiohttp.ClientSession | None" = None
+_history: dict[int, list[dict]] = {}
 
 
 def is_allowed(user: types.User | None) -> bool:
@@ -77,7 +79,7 @@ def get_session() -> aiohttp.ClientSession:
     return _session
 
 
-async def ask_openrouter(user_text: str) -> str:
+async def ask_openrouter(history: list[dict]) -> str:
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY не задан")
@@ -89,10 +91,7 @@ async def ask_openrouter(user_text: str) -> str:
     }
     payload = {
         "model": MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_text},
-        ],
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *history],
         "temperature": 0.7,
         "max_tokens": 800,
     }
@@ -120,10 +119,18 @@ async def ask_openrouter(user_text: str) -> str:
 async def cmd_start(message: types.Message) -> None:
     await message.answer(
         "👋 Привет! Я бот-собеседник.\n\n"
-        "Пиши что угодно — отвечу через OpenRouter.\n"
+        "Пиши что угодно — отвечу через OpenRouter и буду помнить, о чём мы говорили.\n"
         f"Текущая модель: {MODEL}\n\n"
-        "Команда /id покажет твой Telegram ID."
+        "Команды:\n"
+        "/reset — забыть историю диалога\n"
+        "/id — показать твой Telegram ID"
     )
+
+
+@dp.message(Command("reset"))
+async def cmd_reset(message: types.Message) -> None:
+    _history.pop(message.chat.id, None)
+    await message.answer("Историю диалога очистил — начинаем с чистого листа.")
 
 
 @dp.message(Command("id"))
@@ -141,16 +148,26 @@ async def handle_message(message: types.Message) -> None:
         await message.answer("Я понимаю только текст 🙂")
         return
 
+    history = _history.setdefault(message.chat.id, [])
+    history.append({"role": "user", "content": text})
+
     await bot.send_chat_action(message.chat.id, "typing")
 
     try:
-        answer = await ask_openrouter(text)
+        answer = await ask_openrouter(history)
     except Exception as error:
         print(f"Ошибка OpenRouter: {error}", flush=True)
+        history.pop()
         await message.answer("Не получилось ответить, попробуй чуть позже.")
         return
 
-    await message.answer(answer[:TELEGRAM_LIMIT] or "Нечего добавить 🤔")
+    answer = answer[:TELEGRAM_LIMIT] or "Нечего добавить 🤔"
+    history.append({"role": "assistant", "content": answer})
+
+    if len(history) > MAX_HISTORY:
+        del history[: len(history) - MAX_HISTORY]
+
+    await message.answer(answer)
 
 
 async def main() -> None:
